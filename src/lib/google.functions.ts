@@ -222,22 +222,38 @@ export const uploadDriveFile = createServerFn({ method: "POST" })
     return await res.json();
   });
 
-export const getDriveDownloadUrl = createServerFn({ method: "POST" })
+export const downloadDriveFile = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ fileId: z.string().min(1) }).parse(d))
   .handler(async ({ data, context }) => {
-    // Return a short-lived download URL that includes the access token.
-    // Browser fetches via /api/google/download to avoid leaking the token.
     const token = await getValidAccessToken(context.userId);
-    // Sanity-check the file exists
-    const res = await driveFetch(
+    const metaRes = await driveFetch(
       token,
-      `/drive/v3/files/${encodeURIComponent(data.fileId)}?fields=name,mimeType`,
+      `/drive/v3/files/${encodeURIComponent(data.fileId)}?fields=name,mimeType,size`,
     );
-    const meta = (await res.json()) as { name: string; mimeType: string };
+    const meta = (await metaRes.json()) as { name: string; mimeType: string; size?: string };
+
+    // Don't download huge files through the server function — block above 25MB.
+    if (meta.size && Number(meta.size) > 25 * 1024 * 1024) {
+      throw new Error("File is larger than 25 MB; download from Drive directly.");
+    }
+
+    // Google Docs/Sheets/Slides need export, not alt=media
+    const isGoogleDoc = meta.mimeType.startsWith("application/vnd.google-apps");
+    const fileRes = isGoogleDoc
+      ? await driveFetch(
+          token,
+          `/drive/v3/files/${encodeURIComponent(data.fileId)}/export?mimeType=application/pdf`,
+        )
+      : await driveFetch(
+          token,
+          `/drive/v3/files/${encodeURIComponent(data.fileId)}?alt=media`,
+        );
+
+    const buf = Buffer.from(await fileRes.arrayBuffer());
     return {
-      downloadPath: `/api/google/download?fileId=${encodeURIComponent(data.fileId)}`,
-      name: meta.name,
-      mimeType: meta.mimeType,
+      name: isGoogleDoc ? `${meta.name}.pdf` : meta.name,
+      mimeType: isGoogleDoc ? "application/pdf" : meta.mimeType,
+      base64: buf.toString("base64"),
     };
   });
