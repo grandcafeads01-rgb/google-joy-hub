@@ -15,6 +15,9 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard.index'
 import { Route as ApiGoogleCallbackRouteImport } from './routes/api/google/callback'
+import { Route as AuthenticatedDashboardSettingsRouteImport } from './routes/_authenticated/dashboard.settings'
+import { Route as AuthenticatedDashboardGmailRouteImport } from './routes/_authenticated/dashboard.gmail'
+import { Route as AuthenticatedDashboardDriveRouteImport } from './routes/_authenticated/dashboard.drive'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -46,17 +49,41 @@ const ApiGoogleCallbackRoute = ApiGoogleCallbackRouteImport.update({
   path: '/api/google/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedDashboardSettingsRoute =
+  AuthenticatedDashboardSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
+const AuthenticatedDashboardGmailRoute =
+  AuthenticatedDashboardGmailRouteImport.update({
+    id: '/gmail',
+    path: '/gmail',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
+const AuthenticatedDashboardDriveRoute =
+  AuthenticatedDashboardDriveRouteImport.update({
+    id: '/drive',
+    path: '/drive',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/dashboard': typeof AuthenticatedDashboardRouteWithChildren
+  '/dashboard/drive': typeof AuthenticatedDashboardDriveRoute
+  '/dashboard/gmail': typeof AuthenticatedDashboardGmailRoute
+  '/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/dashboard/drive': typeof AuthenticatedDashboardDriveRoute
+  '/dashboard/gmail': typeof AuthenticatedDashboardGmailRoute
+  '/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
 }
@@ -66,6 +93,9 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRouteWithChildren
+  '/_authenticated/dashboard/drive': typeof AuthenticatedDashboardDriveRoute
+  '/_authenticated/dashboard/gmail': typeof AuthenticatedDashboardGmailRoute
+  '/_authenticated/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
 }
@@ -75,16 +105,29 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/dashboard'
+    | '/dashboard/drive'
+    | '/dashboard/gmail'
+    | '/dashboard/settings'
     | '/api/google/callback'
     | '/dashboard/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/api/google/callback' | '/dashboard'
+  to:
+    | '/'
+    | '/login'
+    | '/dashboard/drive'
+    | '/dashboard/gmail'
+    | '/dashboard/settings'
+    | '/api/google/callback'
+    | '/dashboard'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/login'
     | '/_authenticated/dashboard'
+    | '/_authenticated/dashboard/drive'
+    | '/_authenticated/dashboard/gmail'
+    | '/_authenticated/dashboard/settings'
     | '/api/google/callback'
     | '/_authenticated/dashboard/'
   fileRoutesById: FileRoutesById
@@ -140,15 +183,42 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGoogleCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/dashboard/settings': {
+      id: '/_authenticated/dashboard/settings'
+      path: '/settings'
+      fullPath: '/dashboard/settings'
+      preLoaderRoute: typeof AuthenticatedDashboardSettingsRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
+    }
+    '/_authenticated/dashboard/gmail': {
+      id: '/_authenticated/dashboard/gmail'
+      path: '/gmail'
+      fullPath: '/dashboard/gmail'
+      preLoaderRoute: typeof AuthenticatedDashboardGmailRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
+    }
+    '/_authenticated/dashboard/drive': {
+      id: '/_authenticated/dashboard/drive'
+      path: '/drive'
+      fullPath: '/dashboard/drive'
+      preLoaderRoute: typeof AuthenticatedDashboardDriveRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
+    }
   }
 }
 
 interface AuthenticatedDashboardRouteChildren {
+  AuthenticatedDashboardDriveRoute: typeof AuthenticatedDashboardDriveRoute
+  AuthenticatedDashboardGmailRoute: typeof AuthenticatedDashboardGmailRoute
+  AuthenticatedDashboardSettingsRoute: typeof AuthenticatedDashboardSettingsRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
 }
 
 const AuthenticatedDashboardRouteChildren: AuthenticatedDashboardRouteChildren =
   {
+    AuthenticatedDashboardDriveRoute: AuthenticatedDashboardDriveRoute,
+    AuthenticatedDashboardGmailRoute: AuthenticatedDashboardGmailRoute,
+    AuthenticatedDashboardSettingsRoute: AuthenticatedDashboardSettingsRoute,
     AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
   }
 
