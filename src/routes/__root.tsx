@@ -84,6 +84,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:description", content: "A single dashboard for your Gmail inbox and Google Drive files." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: "Workspace — Gmail & Drive dashboard" },
+      { name: "twitter:description", content: "A single dashboard for your Gmail inbox and Google Drive files." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/6f65d87e-d56c-4937-84dd-00bc30d957bb/id-preview-530541ad--2f66df0a-c732-4cad-8752-1c2dd6e1f601.lovable.app-1780112215846.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/6f65d87e-d56c-4937-84dd-00bc30d957bb/id-preview-530541ad--2f66df0a-c732-4cad-8752-1c2dd6e1f601.lovable.app-1780112215846.png" },
     ],
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
