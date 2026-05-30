@@ -14,7 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      google_connections: {
+        Row: {
+          connected_at: string
+          connection_id: string
+          user_id: string
+        }
+        Insert: {
+          connected_at?: string
+          connection_id: string
+          user_id: string
+        }
+        Update: {
+          connected_at?: string
+          connection_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
