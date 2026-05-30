@@ -100,7 +100,7 @@ function DrivePage() {
     mutationFn: (f: DriveFile) => download({ data: { fileId: f.id } }),
     onSuccess: (res) => {
       const bytes = base64ToBytes(res.base64);
-      const blob = new Blob([bytes], { type: res.mimeType });
+      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: res.mimeType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
