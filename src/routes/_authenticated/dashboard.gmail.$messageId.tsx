@@ -1,23 +1,52 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, Reply, Forward, Paperclip, Download, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, Reply, Forward, Paperclip, Download, Loader2, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { getGmailMessage, getGmailAttachment } from "@/lib/google.functions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/_authenticated/dashboard/gmail/$messageId")({
   head: () => ({ meta: [{ title: "Email — Workspace" }] }),
   component: MessageDetail,
 });
 
+interface ParsedAddr {
+  name: string;
+  email: string;
+}
+
+function parseAddr(raw: string): ParsedAddr {
+  if (!raw) return { name: "", email: "" };
+  const m = raw.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+  if (m) return { name: m[1].trim(), email: m[2].trim() };
+  return { name: raw.trim(), email: raw.trim() };
+}
+
+function initials(s: string) {
+  const t = s.trim();
+  if (!t) return "?";
+  const parts = t.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 function MessageDetail() {
   const { messageId } = Route.useParams();
   const navigate = useNavigate();
   const fetchMessage = useServerFn(getGmailMessage);
   const fetchAttachment = useServerFn(getGmailAttachment);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["gmail-message", messageId],
@@ -40,7 +69,7 @@ function MessageDetail() {
         a.download = res.filename;
         a.click();
         URL.revokeObjectURL(url);
-      } catch (e) {
+      } catch {
         toast.error("Could not download attachment");
       }
     },
@@ -71,7 +100,16 @@ function MessageDetail() {
     );
   }
 
-  const replyTo = encodeAddr(data.from);
+  const fromAddr = parseAddr(data.from);
+  const dateStr = data.date ? new Date(data.date).toLocaleString() : "";
+  const dateShort = data.date
+    ? new Date(data.date).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "";
 
   return (
     <div className="w-full p-4 sm:p-6 lg:p-8 space-y-4">
@@ -83,18 +121,12 @@ function MessageDetail() {
         </Button>
         <div className="flex gap-2">
           <Button asChild size="sm" variant="outline">
-            <Link
-              to="/dashboard/gmail/compose"
-              search={{ mode: "reply", messageId }}
-            >
+            <Link to="/dashboard/gmail/compose" search={{ mode: "reply", messageId }}>
               <Reply className="size-4 mr-2" /> Reply
             </Link>
           </Button>
           <Button asChild size="sm" variant="outline">
-            <Link
-              to="/dashboard/gmail/compose"
-              search={{ mode: "forward", messageId }}
-            >
+            <Link to="/dashboard/gmail/compose" search={{ mode: "forward", messageId }}>
               <Forward className="size-4 mr-2" /> Forward
             </Link>
           </Button>
@@ -105,26 +137,46 @@ function MessageDetail() {
         <h1 className="font-display text-xl sm:text-2xl font-semibold leading-tight">
           {data.subject}
         </h1>
-        <div className="mt-3 text-sm text-muted-foreground space-y-1">
-          <div>
-            <span className="font-medium text-foreground">From:</span> {data.from}
+
+        {/* Gmail-style sender row */}
+        <div className="mt-5 flex items-start gap-3">
+          <Avatar className="size-10 mt-0.5">
+            <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+              {initials(fromAddr.name || fromAddr.email)}
+            </AvatarFallback>
+          </Avatar>
+
+          <div className="flex-1 min-w-0 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="font-semibold text-sm text-foreground truncate">
+                  {fromAddr.name || fromAddr.email}
+                </span>
+                {fromAddr.name && (
+                  <span className="text-xs text-muted-foreground truncate">
+                    &lt;{fromAddr.email}&gt;
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailsOpen(true)}
+                className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                to me
+                <ChevronDown className="size-3" />
+              </button>
+            </div>
+
+            {dateShort && (
+              <div
+                className="text-xs text-muted-foreground whitespace-nowrap shrink-0"
+                title={dateStr}
+              >
+                {dateShort}
+              </div>
+            )}
           </div>
-          {data.to && (
-            <div>
-              <span className="font-medium text-foreground">To:</span> {data.to}
-            </div>
-          )}
-          {data.cc && (
-            <div>
-              <span className="font-medium text-foreground">Cc:</span> {data.cc}
-            </div>
-          )}
-          {data.date && (
-            <div>
-              <span className="font-medium text-foreground">Date:</span>{" "}
-              {new Date(data.date).toLocaleString()}
-            </div>
-          )}
         </div>
 
         <div className="mt-6 border-t pt-6">
@@ -179,8 +231,29 @@ function MessageDetail() {
         )}
       </Card>
 
-      {/* hidden, prevents unused warning */}
-      <span className="hidden">{replyTo}</span>
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Message details</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm space-y-3">
+            <DetailRow label="From" value={data.from} />
+            {data.to && <DetailRow label="To" value={data.to} />}
+            {data.cc && <DetailRow label="Cc" value={data.cc} />}
+            {dateStr && <DetailRow label="Date" value={dateStr} />}
+            {data.subject && <DetailRow label="Subject" value={data.subject} />}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[80px_1fr] gap-3">
+      <div className="text-muted-foreground text-right">{label}:</div>
+      <div className="break-words">{value}</div>
     </div>
   );
 }
@@ -195,9 +268,4 @@ function formatBytes(n: number) {
     i++;
   }
   return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${u[i]}`;
-}
-
-function encodeAddr(from: string) {
-  const m = from.match(/<(.+)>/);
-  return m ? m[1] : from;
 }
