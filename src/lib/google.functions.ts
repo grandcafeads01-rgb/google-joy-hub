@@ -104,6 +104,179 @@ export const listGmailMessages = createServerFn({ method: "GET" })
     }
   });
 
+export interface GmailAttachment {
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
+export interface GmailMessageDetail {
+  id: string;
+  threadId: string;
+  from: string;
+  to: string;
+  cc: string;
+  subject: string;
+  date: string;
+  messageIdHeader: string;
+  references: string;
+  bodyHtml: string;
+  bodyText: string;
+  attachments: GmailAttachment[];
+}
+
+interface GmailPart {
+  partId?: string;
+  mimeType: string;
+  filename?: string;
+  headers?: { name: string; value: string }[];
+  body?: { size?: number; data?: string; attachmentId?: string };
+  parts?: GmailPart[];
+}
+
+function decodeB64Url(s: string): string {
+  const norm = s.replace(/-/g, "+").replace(/_/g, "/");
+  const pad = norm.length % 4 ? norm + "=".repeat(4 - (norm.length % 4)) : norm;
+  try {
+    return new TextDecoder("utf-8").decode(Buffer.from(pad, "base64"));
+  } catch {
+    return "";
+  }
+}
+
+function walkParts(
+  part: GmailPart,
+  out: { html: string; text: string; attachments: GmailAttachment[] },
+) {
+  const isAttachment =
+    !!part.filename && !!part.body?.attachmentId;
+  if (isAttachment) {
+    out.attachments.push({
+      attachmentId: part.body!.attachmentId!,
+      filename: part.filename!,
+      mimeType: part.mimeType,
+      size: part.body?.size ?? 0,
+    });
+  } else if (part.mimeType === "text/html" && part.body?.data) {
+    out.html += decodeB64Url(part.body.data);
+  } else if (part.mimeType === "text/plain" && part.body?.data) {
+    out.text += decodeB64Url(part.body.data);
+  }
+  if (part.parts) part.parts.forEach((p) => walkParts(p, out));
+}
+
+export const getGmailMessage = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ id: z.string().min(1) }).parse(d))
+  .handler(async ({ data, context }) => {
+    const token = await getValidAccessToken(context.userId);
+    const full = (await gmailFetch(
+      token,
+      `/gmail/v1/users/me/messages/${encodeURIComponent(data.id)}?format=full`,
+    )) as {
+      id: string;
+      threadId: string;
+      payload: GmailPart;
+    };
+    const out = { html: "", text: "", attachments: [] as GmailAttachment[] };
+    walkParts(full.payload, out);
+    const headers = full.payload.headers ?? [];
+    const h = (n: string) =>
+      headers.find((x) => x.name.toLowerCase() === n.toLowerCase())?.value ?? "";
+
+    // Mark as read
+    await gmailFetch(token, `/gmail/v1/users/me/messages/${full.id}/modify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ removeLabelIds: ["UNREAD"] }),
+    }).catch(() => null);
+
+    const result: GmailMessageDetail = {
+      id: full.id,
+      threadId: full.threadId,
+      from: h("From"),
+      to: h("To"),
+      cc: h("Cc"),
+      subject: h("Subject") || "(no subject)",
+      date: h("Date"),
+      messageIdHeader: h("Message-ID"),
+      references: h("References"),
+      bodyHtml: out.html,
+      bodyText: out.text,
+      attachments: out.attachments,
+    };
+    return result;
+  });
+
+export const getGmailAttachment = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z.object({
+      messageId: z.string().min(1),
+      attachmentId: z.string().min(1),
+      filename: z.string().min(1),
+      mimeType: z.string().min(1),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const token = await getValidAccessToken(context.userId);
+    const res = (await gmailFetch(
+      token,
+      `/gmail/v1/users/me/messages/${encodeURIComponent(data.messageId)}/attachments/${encodeURIComponent(data.attachmentId)}`,
+    )) as { data: string; size: number };
+    // Convert b64url -> b64
+    const b64 = res.data.replace(/-/g, "+").replace(/_/g, "/");
+    return { filename: data.filename, mimeType: data.mimeType, base64: b64 };
+  });
+
+function toB64Url(s: string): string {
+  return Buffer.from(s, "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+export const sendGmailMessage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z.object({
+      to: z.string().min(1).max(2000),
+      cc: z.string().max(2000).optional(),
+      bcc: z.string().max(2000).optional(),
+      subject: z.string().max(998),
+      body: z.string().max(500_000),
+      threadId: z.string().optional(),
+      inReplyTo: z.string().optional(),
+      references: z.string().optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const token = await getValidAccessToken(context.userId);
+    const lines: string[] = [];
+    lines.push(`To: ${data.to}`);
+    if (data.cc) lines.push(`Cc: ${data.cc}`);
+    if (data.bcc) lines.push(`Bcc: ${data.bcc}`);
+    lines.push(`Subject: ${data.subject}`);
+    if (data.inReplyTo) lines.push(`In-Reply-To: ${data.inReplyTo}`);
+    if (data.references) lines.push(`References: ${data.references}`);
+    lines.push("MIME-Version: 1.0");
+    lines.push('Content-Type: text/html; charset="UTF-8"');
+    lines.push("Content-Transfer-Encoding: 7bit");
+    lines.push("");
+    lines.push(data.body);
+    const raw = toB64Url(lines.join("\r\n"));
+    const body: Record<string, string> = { raw };
+    if (data.threadId) body.threadId = data.threadId;
+    await gmailFetch(token, "/gmail/v1/users/me/messages/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return { ok: true };
+  });
+
 /* ---------------------------------- Drive --------------------------------- */
 
 async function driveFetch(token: string, path: string, init?: RequestInit) {
