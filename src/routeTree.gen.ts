@@ -18,6 +18,8 @@ import { Route as ApiGoogleCallbackRouteImport } from './routes/api/google/callb
 import { Route as AuthenticatedDashboardSettingsRouteImport } from './routes/_authenticated/dashboard.settings'
 import { Route as AuthenticatedDashboardGmailRouteImport } from './routes/_authenticated/dashboard.gmail'
 import { Route as AuthenticatedDashboardDriveRouteImport } from './routes/_authenticated/dashboard.drive'
+import { Route as AuthenticatedDashboardGmailComposeRouteImport } from './routes/_authenticated/dashboard.gmail.compose'
+import { Route as AuthenticatedDashboardGmailMessageIdRouteImport } from './routes/_authenticated/dashboard.gmail.$messageId'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -67,25 +69,41 @@ const AuthenticatedDashboardDriveRoute =
     path: '/drive',
     getParentRoute: () => AuthenticatedDashboardRoute,
   } as any)
+const AuthenticatedDashboardGmailComposeRoute =
+  AuthenticatedDashboardGmailComposeRouteImport.update({
+    id: '/compose',
+    path: '/compose',
+    getParentRoute: () => AuthenticatedDashboardGmailRoute,
+  } as any)
+const AuthenticatedDashboardGmailMessageIdRoute =
+  AuthenticatedDashboardGmailMessageIdRouteImport.update({
+    id: '/$messageId',
+    path: '/$messageId',
+    getParentRoute: () => AuthenticatedDashboardGmailRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/dashboard': typeof AuthenticatedDashboardRouteWithChildren
   '/dashboard/drive': typeof AuthenticatedDashboardDriveRoute
-  '/dashboard/gmail': typeof AuthenticatedDashboardGmailRoute
+  '/dashboard/gmail': typeof AuthenticatedDashboardGmailRouteWithChildren
   '/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
+  '/dashboard/gmail/$messageId': typeof AuthenticatedDashboardGmailMessageIdRoute
+  '/dashboard/gmail/compose': typeof AuthenticatedDashboardGmailComposeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/dashboard/drive': typeof AuthenticatedDashboardDriveRoute
-  '/dashboard/gmail': typeof AuthenticatedDashboardGmailRoute
+  '/dashboard/gmail': typeof AuthenticatedDashboardGmailRouteWithChildren
   '/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
+  '/dashboard/gmail/$messageId': typeof AuthenticatedDashboardGmailMessageIdRoute
+  '/dashboard/gmail/compose': typeof AuthenticatedDashboardGmailComposeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -94,10 +112,12 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRouteWithChildren
   '/_authenticated/dashboard/drive': typeof AuthenticatedDashboardDriveRoute
-  '/_authenticated/dashboard/gmail': typeof AuthenticatedDashboardGmailRoute
+  '/_authenticated/dashboard/gmail': typeof AuthenticatedDashboardGmailRouteWithChildren
   '/_authenticated/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
+  '/_authenticated/dashboard/gmail/$messageId': typeof AuthenticatedDashboardGmailMessageIdRoute
+  '/_authenticated/dashboard/gmail/compose': typeof AuthenticatedDashboardGmailComposeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -110,6 +130,8 @@ export interface FileRouteTypes {
     | '/dashboard/settings'
     | '/api/google/callback'
     | '/dashboard/'
+    | '/dashboard/gmail/$messageId'
+    | '/dashboard/gmail/compose'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -119,6 +141,8 @@ export interface FileRouteTypes {
     | '/dashboard/settings'
     | '/api/google/callback'
     | '/dashboard'
+    | '/dashboard/gmail/$messageId'
+    | '/dashboard/gmail/compose'
   id:
     | '__root__'
     | '/'
@@ -130,6 +154,8 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard/settings'
     | '/api/google/callback'
     | '/_authenticated/dashboard/'
+    | '/_authenticated/dashboard/gmail/$messageId'
+    | '/_authenticated/dashboard/gmail/compose'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -204,12 +230,44 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardDriveRouteImport
       parentRoute: typeof AuthenticatedDashboardRoute
     }
+    '/_authenticated/dashboard/gmail/compose': {
+      id: '/_authenticated/dashboard/gmail/compose'
+      path: '/compose'
+      fullPath: '/dashboard/gmail/compose'
+      preLoaderRoute: typeof AuthenticatedDashboardGmailComposeRouteImport
+      parentRoute: typeof AuthenticatedDashboardGmailRoute
+    }
+    '/_authenticated/dashboard/gmail/$messageId': {
+      id: '/_authenticated/dashboard/gmail/$messageId'
+      path: '/$messageId'
+      fullPath: '/dashboard/gmail/$messageId'
+      preLoaderRoute: typeof AuthenticatedDashboardGmailMessageIdRouteImport
+      parentRoute: typeof AuthenticatedDashboardGmailRoute
+    }
   }
 }
 
+interface AuthenticatedDashboardGmailRouteChildren {
+  AuthenticatedDashboardGmailMessageIdRoute: typeof AuthenticatedDashboardGmailMessageIdRoute
+  AuthenticatedDashboardGmailComposeRoute: typeof AuthenticatedDashboardGmailComposeRoute
+}
+
+const AuthenticatedDashboardGmailRouteChildren: AuthenticatedDashboardGmailRouteChildren =
+  {
+    AuthenticatedDashboardGmailMessageIdRoute:
+      AuthenticatedDashboardGmailMessageIdRoute,
+    AuthenticatedDashboardGmailComposeRoute:
+      AuthenticatedDashboardGmailComposeRoute,
+  }
+
+const AuthenticatedDashboardGmailRouteWithChildren =
+  AuthenticatedDashboardGmailRoute._addFileChildren(
+    AuthenticatedDashboardGmailRouteChildren,
+  )
+
 interface AuthenticatedDashboardRouteChildren {
   AuthenticatedDashboardDriveRoute: typeof AuthenticatedDashboardDriveRoute
-  AuthenticatedDashboardGmailRoute: typeof AuthenticatedDashboardGmailRoute
+  AuthenticatedDashboardGmailRoute: typeof AuthenticatedDashboardGmailRouteWithChildren
   AuthenticatedDashboardSettingsRoute: typeof AuthenticatedDashboardSettingsRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
 }
@@ -217,7 +275,8 @@ interface AuthenticatedDashboardRouteChildren {
 const AuthenticatedDashboardRouteChildren: AuthenticatedDashboardRouteChildren =
   {
     AuthenticatedDashboardDriveRoute: AuthenticatedDashboardDriveRoute,
-    AuthenticatedDashboardGmailRoute: AuthenticatedDashboardGmailRoute,
+    AuthenticatedDashboardGmailRoute:
+      AuthenticatedDashboardGmailRouteWithChildren,
     AuthenticatedDashboardSettingsRoute: AuthenticatedDashboardSettingsRoute,
     AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
   }

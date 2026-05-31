@@ -1,9 +1,9 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useMatchRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { Mail, Inbox, RefreshCw, Link2 } from "lucide-react";
+import { Mail, Inbox, RefreshCw, Link2, PenSquare } from "lucide-react";
 import { listGmailMessages } from "@/lib/google.functions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,10 +11,21 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/_authenticated/dashboard/gmail")({
   head: () => ({ meta: [{ title: "Gmail — Workspace" }] }),
-  component: GmailPage,
+  component: GmailLayout,
 });
 
-function GmailPage() {
+function GmailLayout() {
+  const matchRoute = useMatchRoute();
+  // When viewing a child route (message detail or compose), render just it.
+  const onChild =
+    matchRoute({ to: "/dashboard/gmail/$messageId" as never, fuzzy: true }) ||
+    matchRoute({ to: "/dashboard/gmail/compose" as never, fuzzy: true });
+
+  if (onChild) return <Outlet />;
+  return <GmailInbox />;
+}
+
+function GmailInbox() {
   const fetchGmail = useServerFn(listGmailMessages);
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["gmail-summary"],
@@ -22,7 +33,6 @@ function GmailPage() {
     refetchInterval: 30_000,
   });
 
-  // Live notifications for new unread messages
   const seenIds = useRef<Set<string> | null>(null);
   useEffect(() => {
     if (!data?.connected) return;
@@ -49,23 +59,30 @@ function GmailPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-6 max-w-4xl">
-      <div className="flex items-end justify-between">
+    <div className="w-full p-4 sm:p-6 lg:p-8 space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-bold tracking-tight flex items-center gap-3">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-3">
             <Mail className="size-7 text-[color:var(--color-gmail)]" /> Inbox
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-1 text-sm">
             Auto-refreshes every 30s • Live notifications enabled
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-          <RefreshCw className={`size-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={`size-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+          <Button asChild size="sm">
+            <Link to="/dashboard/gmail/compose">
+              <PenSquare className="size-4 mr-2" /> Compose
+            </Link>
+          </Button>
+        </div>
       </div>
 
-      <Card>
+      <Card className="w-full overflow-hidden">
         {isLoading && <ListSkeleton />}
         {data?.connected && data.messages.length === 0 && (
           <div className="p-12 text-center text-muted-foreground">
@@ -75,8 +92,10 @@ function GmailPage() {
         )}
         {data?.connected &&
           data.messages.map((m) => (
-            <div
+            <Link
               key={m.id}
+              to="/dashboard/gmail/$messageId"
+              params={{ messageId: m.id }}
               className={`flex items-start gap-4 p-4 border-b last:border-0 hover:bg-accent/40 transition-colors ${
                 m.unread ? "bg-primary/[0.03]" : ""
               }`}
@@ -100,7 +119,7 @@ function GmailPage() {
                   {m.snippet}
                 </div>
               </div>
-            </div>
+            </Link>
           ))}
       </Card>
     </div>
