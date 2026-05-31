@@ -112,7 +112,7 @@ function MessageDetail() {
     : "";
 
   return (
-    <div className="w-full p-4 sm:p-6 lg:p-8 space-y-4">
+    <div className="w-full p-4 sm:p-6 lg:p-8 space-y-2">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <Button variant="ghost" size="sm" asChild>
           <Link to="/dashboard/gmail">
@@ -133,7 +133,7 @@ function MessageDetail() {
         </div>
       </div>
 
-      <Card className="p-5 sm:p-7 w-full">
+      <div className="w-full">
         <h1 className="font-display text-xl sm:text-2xl font-semibold leading-tight">
           {data.subject}
         </h1>
@@ -179,7 +179,7 @@ function MessageDetail() {
           </div>
         </div>
 
-        <div className="mt-6 border-t pt-6">
+        <div className="mt-6">
           {data.bodyHtml ? (
             <iframe
               title="email-body"
@@ -229,7 +229,7 @@ function MessageDetail() {
             </div>
           </div>
         )}
-      </Card>
+      </div>
 
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="max-w-lg">
