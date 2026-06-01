@@ -133,7 +133,7 @@ function MessageDetail() {
         </div>
       </div>
 
-      <div className="w-full">
+      <div className="w-full shrink-0">
         <h1 className="font-display text-xl sm:text-2xl font-semibold leading-tight">
           {data.subject}
         </h1>
@@ -178,21 +178,21 @@ function MessageDetail() {
             )}
           </div>
         </div>
+      </div>
 
-        <div className="mt-6">
-          {data.bodyHtml ? (
-            <iframe
-              title="email-body"
-              sandbox=""
-              srcDoc={data.bodyHtml}
-              className="w-full min-h-[60vh] bg-white rounded-md border"
-            />
-          ) : (
-            <pre className="whitespace-pre-wrap break-words font-sans text-sm">
-              {data.bodyText || "(empty message)"}
-            </pre>
-          )}
-        </div>
+      <div className="flex-1 min-h-0 overflow-auto mt-6">
+        {data.bodyHtml ? (
+          <iframe
+            title="email-body"
+            sandbox=""
+            srcDoc={data.bodyHtml}
+            className="w-full h-full bg-white rounded-md border"
+          />
+        ) : (
+          <pre className="whitespace-pre-wrap break-words font-sans text-sm h-full overflow-auto">
+            {data.bodyText || "(empty message)"}
+          </pre>
+        )}
 
         {data.attachments.length > 0 && (
           <div className="mt-6 border-t pt-5">
@@ -209,7 +209,7 @@ function MessageDetail() {
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium">{a.filename}</div>
                     <div className="text-xs text-muted-foreground">
-                      {a.mimeType} • {formatBytes(a.size)}
+                      {a.mimeType} &bull; {formatBytes(a.size)}
                     </div>
                   </div>
                   <Button
