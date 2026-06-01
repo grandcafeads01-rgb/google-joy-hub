@@ -69,7 +69,8 @@ function GmailLayout() {
 }
 
 function GmailList() {
-  const { folder = "inbox" } = Route.useSearch();
+  const search = Route.useSearch();
+  const folder = search.folder ?? "inbox";
   const meta = FOLDER_META[folder];
   const fetchGmail = useServerFn(listGmailMessages);
   const { data, isLoading, refetch, isFetching } = useQuery({
