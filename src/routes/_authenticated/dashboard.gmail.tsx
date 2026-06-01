@@ -1,41 +1,87 @@
-import { createFileRoute, Link, Outlet, useMatchRoute } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  useMatchRoute,
+  useNavigate,
+} from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef } from "react";
+import { z } from "zod";
 import { toast } from "sonner";
-import { Mail, Inbox, RefreshCw, Link2, PenSquare } from "lucide-react";
+import {
+  Mail,
+  Inbox,
+  RefreshCw,
+  Link2,
+  PenSquare,
+  Send as SendIcon,
+  FileText,
+  AlertOctagon,
+} from "lucide-react";
 import { listGmailMessages } from "@/lib/google.functions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
+const searchSchema = z.object({
+  folder: z.enum(["inbox", "sent", "drafts", "spam"]).optional(),
+});
+
 export const Route = createFileRoute("/_authenticated/dashboard/gmail")({
   head: () => ({ meta: [{ title: "Gmail — Workspace" }] }),
+  validateSearch: searchSchema,
   component: GmailLayout,
 });
 
+const FOLDER_META: Record<
+  "inbox" | "sent" | "drafts" | "spam",
+  { title: string; icon: typeof Mail; emptyLabel: string }
+> = {
+  inbox: { title: "Inbox", icon: Inbox, emptyLabel: "Inbox is empty." },
+  sent: { title: "Sent", icon: SendIcon, emptyLabel: "No sent messages." },
+  drafts: { title: "Drafts", icon: FileText, emptyLabel: "No drafts." },
+  spam: { title: "Spam", icon: AlertOctagon, emptyLabel: "No spam." },
+};
+
 function GmailLayout() {
   const matchRoute = useMatchRoute();
-  // When viewing a child route (message detail or compose), render just it.
-  const onChild =
-    matchRoute({ to: "/dashboard/gmail/$messageId" as never, fuzzy: true }) ||
-    matchRoute({ to: "/dashboard/gmail/compose" as never, fuzzy: true });
-
-  if (onChild) return <Outlet />;
-  return <GmailInbox />;
-}
-
-function GmailInbox() {
-  const fetchGmail = useServerFn(listGmailMessages);
-  const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["gmail-summary"],
-    queryFn: () => fetchGmail(),
-    refetchInterval: 30_000,
+  const onMessage = matchRoute({
+    to: "/dashboard/gmail/$messageId" as never,
+    fuzzy: true,
+  });
+  const onCompose = matchRoute({
+    to: "/dashboard/gmail/compose" as never,
+    fuzzy: true,
   });
 
+  // Message detail takes over the screen.
+  if (onMessage) return <Outlet />;
+
+  // Compose renders as a modal overlay above the list.
+  return (
+    <>
+      <GmailList />
+      {onCompose && <Outlet />}
+    </>
+  );
+}
+
+function GmailList() {
+  const { folder = "inbox" } = Route.useSearch();
+  const meta = FOLDER_META[folder];
+  const fetchGmail = useServerFn(listGmailMessages);
+  const { data, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ["gmail-summary", folder],
+    queryFn: () => fetchGmail({ data: { folder } }),
+    refetchInterval: folder === "inbox" ? 30_000 : false,
+  });
+
+  // New-mail toast only for inbox
   const seenIds = useRef<Set<string> | null>(null);
   useEffect(() => {
-    if (!data?.connected) return;
+    if (folder !== "inbox" || !data?.connected) return;
     const currentIds = new Set(data.messages.map((m) => m.id));
     if (seenIds.current === null) {
       seenIds.current = currentIds;
@@ -45,10 +91,18 @@ function GmailInbox() {
       (m) => m.unread && !seenIds.current!.has(m.id),
     );
     newUnread.forEach((m) => {
-      toast(`New email: ${m.subject}`, { description: m.from, icon: <Mail className="size-4" /> });
+      toast(`New email: ${m.subject}`, {
+        description: m.from,
+        icon: <Mail className="size-4" />,
+      });
     });
     seenIds.current = currentIds;
-  }, [data]);
+  }, [data, folder]);
+
+  // Reset notification baseline when switching folders
+  useEffect(() => {
+    seenIds.current = null;
+  }, [folder]);
 
   if (!isLoading && data && !data.connected) {
     return (
@@ -58,16 +112,20 @@ function GmailInbox() {
     );
   }
 
+  const Icon = meta.icon;
+
   return (
     <div className="w-full p-4 sm:p-6 lg:p-8 space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-3">
-            <Mail className="size-7 text-[color:var(--color-gmail)]" /> Inbox
+            <Icon className="size-7 text-[color:var(--color-gmail)]" /> {meta.title}
           </h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Auto-refreshes every 30s • Live notifications enabled
-          </p>
+          {folder === "inbox" && (
+            <p className="text-muted-foreground mt-1 text-sm">
+              Auto-refreshes every 30s • Live notifications enabled
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
@@ -75,7 +133,11 @@ function GmailInbox() {
             Refresh
           </Button>
           <Button asChild size="sm">
-            <Link to="/dashboard/gmail/compose">
+            <Link
+              to="/dashboard/gmail/compose"
+              search={{ mode: "new" }}
+              from="/dashboard/gmail"
+            >
               <PenSquare className="size-4 mr-2" /> Compose
             </Link>
           </Button>
@@ -86,8 +148,8 @@ function GmailInbox() {
         {isLoading && <ListSkeleton />}
         {data?.connected && data.messages.length === 0 && (
           <div className="p-12 text-center text-muted-foreground">
-            <Inbox className="size-10 mx-auto mb-2 opacity-50" />
-            Inbox is empty.
+            <Icon className="size-10 mx-auto mb-2 opacity-50" />
+            {meta.emptyLabel}
           </div>
         )}
         {data?.connected &&
