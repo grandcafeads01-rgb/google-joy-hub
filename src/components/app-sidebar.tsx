@@ -1,7 +1,18 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { LayoutDashboard, Mail, HardDrive, Settings, LogOut } from "lucide-react";
+import {
+  LayoutDashboard,
+  Mail,
+  HardDrive,
+  Settings,
+  LogOut,
+  Inbox,
+  Send as SendIcon,
+  FileText,
+  AlertOctagon,
+  ChevronRight,
+} from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -13,38 +24,49 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { listGmailMessages, getGoogleConnection } from "@/lib/google.functions";
 import { supabase } from "@/integrations/supabase/client";
 
-const items = [
-  { title: "Overview", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Gmail", url: "/dashboard/gmail", icon: Mail, key: "gmail" as const },
-  { title: "Drive", url: "/dashboard/drive", icon: HardDrive },
-  { title: "Settings", url: "/dashboard/settings", icon: Settings },
-];
+const gmailFolders = [
+  { key: "inbox", title: "Inbox", icon: Inbox },
+  { key: "sent", title: "Sent", icon: SendIcon },
+  { key: "drafts", title: "Drafts", icon: FileText },
+  { key: "spam", title: "Spam", icon: AlertOctagon },
+] as const;
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const navigate = useNavigate();
   const currentPath = useRouterState({ select: (r) => r.location.pathname });
+  const currentSearch = useRouterState({ select: (r) => r.location.search }) as {
+    folder?: string;
+  };
 
   const fetchConn = useServerFn(getGoogleConnection);
   const fetchGmail = useServerFn(listGmailMessages);
   const conn = useQuery({ queryKey: ["google-conn"], queryFn: () => fetchConn() });
   const gmail = useQuery({
-    queryKey: ["gmail-summary"],
-    queryFn: () => fetchGmail(),
+    queryKey: ["gmail-summary", "inbox"],
+    queryFn: () => fetchGmail({ data: { folder: "inbox" } }),
     enabled: !!conn.data,
     refetchInterval: 30_000,
   });
   const unread = gmail.data?.connected ? gmail.data.messages.filter((m) => m.unread).length : 0;
 
-  const isActive = (path: string) =>
-    path === "/dashboard" ? currentPath === path : currentPath.startsWith(path);
+  const gmailActive = currentPath.startsWith("/dashboard/gmail");
+  const activeFolder = (currentSearch?.folder as string) || "inbox";
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -68,25 +90,96 @@ export function AppSidebar() {
           <SidebarGroupLabel>Navigate</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                    <Link to={item.url} className="flex items-center gap-2">
-                      <item.icon className="size-4" />
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={currentPath === "/dashboard"}
+                  tooltip="Overview"
+                >
+                  <Link to="/dashboard" className="flex items-center gap-2">
+                    <LayoutDashboard className="size-4" />
+                    {!collapsed && <span>Overview</span>}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              {/* Gmail with sub-items */}
+              <Collapsible defaultOpen={gmailActive} className="group/collapsible">
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton isActive={gmailActive} tooltip="Gmail">
+                      <Mail className="size-4" />
                       {!collapsed && (
                         <>
-                          <span className="flex-1">{item.title}</span>
-                          {item.key === "gmail" && unread > 0 && (
-                            <Badge className="bg-[color:var(--color-gmail)] text-white">
+                          <span className="flex-1 text-left">Gmail</span>
+                          {unread > 0 && (
+                            <Badge className="bg-[color:var(--color-gmail)] text-white mr-1">
                               {unread}
                             </Badge>
                           )}
+                          <ChevronRight className="size-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
                         </>
                       )}
-                    </Link>
-                  </SidebarMenuButton>
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  {!collapsed && (
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {gmailFolders.map((f) => (
+                          <SidebarMenuSubItem key={f.key}>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={gmailActive && activeFolder === f.key}
+                            >
+                              <Link
+                                to="/dashboard/gmail"
+                                search={{ folder: f.key }}
+                                className="flex items-center gap-2"
+                              >
+                                <f.icon className="size-3.5" />
+                                <span className="flex-1">{f.title}</span>
+                                {f.key === "inbox" && unread > 0 && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-[10px] h-4 px-1.5"
+                                  >
+                                    {unread}
+                                  </Badge>
+                                )}
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  )}
                 </SidebarMenuItem>
-              ))}
+              </Collapsible>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={currentPath.startsWith("/dashboard/drive")}
+                  tooltip="Drive"
+                >
+                  <Link to="/dashboard/drive" className="flex items-center gap-2">
+                    <HardDrive className="size-4" />
+                    {!collapsed && <span>Drive</span>}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={currentPath.startsWith("/dashboard/settings")}
+                  tooltip="Settings"
+                >
+                  <Link to="/dashboard/settings" className="flex items-center gap-2">
+                    <Settings className="size-4" />
+                    {!collapsed && <span>Settings</span>}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

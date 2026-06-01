@@ -60,14 +60,30 @@ export interface GmailMessage {
   unread: boolean;
 }
 
+const FOLDER_LABELS = {
+  inbox: "INBOX",
+  sent: "SENT",
+  drafts: "DRAFT",
+  spam: "SPAM",
+} as const;
+export type GmailFolder = keyof typeof FOLDER_LABELS;
+
 export const listGmailMessages = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .inputValidator((d) =>
+    z
+      .object({ folder: z.enum(["inbox", "sent", "drafts", "spam"]).optional() })
+      .optional()
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const folder: GmailFolder = data?.folder ?? "inbox";
+    const label = FOLDER_LABELS[folder];
     try {
       const token = await getValidAccessToken(context.userId);
       const list = (await gmailFetch(
         token,
-        "/gmail/v1/users/me/messages?maxResults=20&labelIds=INBOX",
+        `/gmail/v1/users/me/messages?maxResults=30&labelIds=${label}`,
       )) as { messages?: { id: string; threadId: string }[] };
 
       const ids = list.messages ?? [];
