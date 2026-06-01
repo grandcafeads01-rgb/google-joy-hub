@@ -112,8 +112,8 @@ function MessageDetail() {
     : "";
 
   return (
-    <div className="w-full p-4 sm:p-6 lg:p-8 space-y-2">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="w-full h-full flex flex-col p-4 sm:p-6 lg:p-8">
+      <div className="flex items-center justify-between flex-wrap gap-3 shrink-0">
         <Button variant="ghost" size="sm" asChild>
           <Link to="/dashboard/gmail">
             <ArrowLeft className="size-4 mr-2" /> Inbox
