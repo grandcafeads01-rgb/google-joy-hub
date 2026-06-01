@@ -186,10 +186,10 @@ function MessageDetail() {
             title="email-body"
             sandbox=""
             srcDoc={data.bodyHtml}
-            className="w-full h-full bg-white rounded-md border"
+            className="w-full min-h-[50vh] bg-white rounded-md border"
           />
         ) : (
-          <pre className="whitespace-pre-wrap break-words font-sans text-sm h-full overflow-auto">
+          <pre className="whitespace-pre-wrap break-words font-sans text-sm min-h-[50vh]">
             {data.bodyText || "(empty message)"}
           </pre>
         )}
