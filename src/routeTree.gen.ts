@@ -16,6 +16,7 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard.index'
 import { Route as ApiGoogleCallbackRouteImport } from './routes/api/google/callback'
 import { Route as AuthenticatedDashboardSettingsRouteImport } from './routes/_authenticated/dashboard.settings'
+import { Route as AuthenticatedDashboardMerchantRouteImport } from './routes/_authenticated/dashboard.merchant'
 import { Route as AuthenticatedDashboardGmailRouteImport } from './routes/_authenticated/dashboard.gmail'
 import { Route as AuthenticatedDashboardDriveRouteImport } from './routes/_authenticated/dashboard.drive'
 import { Route as AuthenticatedDashboardGmailComposeRouteImport } from './routes/_authenticated/dashboard.gmail.compose'
@@ -57,6 +58,12 @@ const AuthenticatedDashboardSettingsRoute =
     path: '/settings',
     getParentRoute: () => AuthenticatedDashboardRoute,
   } as any)
+const AuthenticatedDashboardMerchantRoute =
+  AuthenticatedDashboardMerchantRouteImport.update({
+    id: '/merchant',
+    path: '/merchant',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
 const AuthenticatedDashboardGmailRoute =
   AuthenticatedDashboardGmailRouteImport.update({
     id: '/gmail',
@@ -88,6 +95,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRouteWithChildren
   '/dashboard/drive': typeof AuthenticatedDashboardDriveRoute
   '/dashboard/gmail': typeof AuthenticatedDashboardGmailRouteWithChildren
+  '/dashboard/merchant': typeof AuthenticatedDashboardMerchantRoute
   '/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
@@ -99,6 +107,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/dashboard/drive': typeof AuthenticatedDashboardDriveRoute
   '/dashboard/gmail': typeof AuthenticatedDashboardGmailRouteWithChildren
+  '/dashboard/merchant': typeof AuthenticatedDashboardMerchantRoute
   '/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
@@ -113,6 +122,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRouteWithChildren
   '/_authenticated/dashboard/drive': typeof AuthenticatedDashboardDriveRoute
   '/_authenticated/dashboard/gmail': typeof AuthenticatedDashboardGmailRouteWithChildren
+  '/_authenticated/dashboard/merchant': typeof AuthenticatedDashboardMerchantRoute
   '/_authenticated/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
@@ -127,6 +137,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/dashboard/drive'
     | '/dashboard/gmail'
+    | '/dashboard/merchant'
     | '/dashboard/settings'
     | '/api/google/callback'
     | '/dashboard/'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/dashboard/drive'
     | '/dashboard/gmail'
+    | '/dashboard/merchant'
     | '/dashboard/settings'
     | '/api/google/callback'
     | '/dashboard'
@@ -151,6 +163,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/dashboard/drive'
     | '/_authenticated/dashboard/gmail'
+    | '/_authenticated/dashboard/merchant'
     | '/_authenticated/dashboard/settings'
     | '/api/google/callback'
     | '/_authenticated/dashboard/'
@@ -216,6 +229,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardSettingsRouteImport
       parentRoute: typeof AuthenticatedDashboardRoute
     }
+    '/_authenticated/dashboard/merchant': {
+      id: '/_authenticated/dashboard/merchant'
+      path: '/merchant'
+      fullPath: '/dashboard/merchant'
+      preLoaderRoute: typeof AuthenticatedDashboardMerchantRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
+    }
     '/_authenticated/dashboard/gmail': {
       id: '/_authenticated/dashboard/gmail'
       path: '/gmail'
@@ -268,6 +288,7 @@ const AuthenticatedDashboardGmailRouteWithChildren =
 interface AuthenticatedDashboardRouteChildren {
   AuthenticatedDashboardDriveRoute: typeof AuthenticatedDashboardDriveRoute
   AuthenticatedDashboardGmailRoute: typeof AuthenticatedDashboardGmailRouteWithChildren
+  AuthenticatedDashboardMerchantRoute: typeof AuthenticatedDashboardMerchantRoute
   AuthenticatedDashboardSettingsRoute: typeof AuthenticatedDashboardSettingsRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
 }
@@ -277,6 +298,7 @@ const AuthenticatedDashboardRouteChildren: AuthenticatedDashboardRouteChildren =
     AuthenticatedDashboardDriveRoute: AuthenticatedDashboardDriveRoute,
     AuthenticatedDashboardGmailRoute:
       AuthenticatedDashboardGmailRouteWithChildren,
+    AuthenticatedDashboardMerchantRoute: AuthenticatedDashboardMerchantRoute,
     AuthenticatedDashboardSettingsRoute: AuthenticatedDashboardSettingsRoute,
     AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
   }
@@ -307,3 +329,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
