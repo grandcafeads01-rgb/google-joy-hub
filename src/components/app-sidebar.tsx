@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Mail,
   HardDrive,
+  ShoppingBag,
   Settings,
   LogOut,
   Inbox,
@@ -165,6 +166,18 @@ export function AppSidebar() {
                   <Link to="/dashboard/drive" className="flex items-center gap-2">
                     <HardDrive className="size-4" />
                     {!collapsed && <span>Drive</span>}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={currentPath.startsWith("/dashboard/merchant")}
+                  tooltip="Merchant Center"
+                >
+                  <Link to="/dashboard/merchant" className="flex items-center gap-2">
+                    <ShoppingBag className="size-4" />
+                    {!collapsed && <span>Merchant Center</span>}
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

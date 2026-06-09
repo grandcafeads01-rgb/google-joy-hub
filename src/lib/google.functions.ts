@@ -446,3 +446,170 @@ export const downloadDriveFile = createServerFn({ method: "POST" })
       base64: buf.toString("base64"),
     };
   });
+
+/* ----------------------------- Merchant Center ---------------------------- */
+
+const MC_BASE = "https://shoppingcontent.googleapis.com/content/v2.1";
+
+async function mcFetch(token: string, path: string, init?: RequestInit) {
+  const res = await fetch(`${MC_BASE}${path}`, {
+    ...init,
+    headers: { ...(init?.headers || {}), Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Merchant ${path}: ${res.status} ${body}`);
+  }
+  return res.json();
+}
+
+export interface MerchantAccount {
+  merchantId: string;
+  name?: string;
+}
+
+export interface MerchantProduct {
+  id: string;
+  title: string;
+  description?: string;
+  price?: { value: string; currency: string };
+  imageLink?: string;
+  availability?: string;
+  link?: string;
+  brand?: string;
+}
+
+export const listMerchantAccounts = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    try {
+      const token = await getValidAccessToken(context.userId);
+      const info = (await mcFetch(token, "/accounts/authinfo")) as {
+        accountIdentifiers?: { merchantId?: string; aggregatorId?: string }[];
+      };
+      const ids = (info.accountIdentifiers ?? [])
+        .map((a) => a.merchantId ?? a.aggregatorId)
+        .filter(Boolean) as string[];
+      const accounts: MerchantAccount[] = [];
+      for (const id of ids) {
+        try {
+          const acc = (await mcFetch(token, `/${id}/accounts/${id}`)) as {
+            id: string;
+            name?: string;
+          };
+          accounts.push({ merchantId: id, name: acc.name });
+        } catch {
+          accounts.push({ merchantId: id });
+        }
+      }
+      return { connected: true as const, accounts };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg === "NO_GOOGLE_CONNECTION")
+        return { connected: false as const, accounts: [] as MerchantAccount[] };
+      throw e;
+    }
+  });
+
+export const listMerchantProducts = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ merchantId: z.string().min(1) }).parse(d))
+  .handler(async ({ data, context }) => {
+    const token = await getValidAccessToken(context.userId);
+    const json = (await mcFetch(
+      token,
+      `/${encodeURIComponent(data.merchantId)}/products?maxResults=50`,
+    )) as { resources?: any[] };
+    const products: MerchantProduct[] = (json.resources ?? []).map((p) => ({
+      id: p.id,
+      title: p.title,
+      description: p.description,
+      price: p.price,
+      imageLink: p.imageLink,
+      availability: p.availability,
+      link: p.link,
+      brand: p.brand,
+    }));
+    return { products };
+  });
+
+const sampleProductSchema = z.object({
+  offerId: z.string().min(1).max(255),
+  title: z.string().min(1).max(255),
+  description: z.string().min(1).max(5000),
+  link: z.string().url(),
+  imageLink: z.string().url(),
+  priceValue: z.string().regex(/^\d+(\.\d{1,2})?$/),
+  priceCurrency: z.string().length(3),
+  brand: z.string().min(1).max(100),
+  availability: z.enum(["in stock", "out of stock", "preorder"]).default("in stock"),
+  condition: z.enum(["new", "refurbished", "used"]).default("new"),
+});
+
+export const insertMerchantProduct = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z.object({ merchantId: z.string().min(1), product: sampleProductSchema }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const token = await getValidAccessToken(context.userId);
+    const p = data.product;
+    const body = {
+      offerId: p.offerId,
+      title: p.title,
+      description: p.description,
+      link: p.link,
+      imageLink: p.imageLink,
+      contentLanguage: "en",
+      targetCountry: "US",
+      channel: "online",
+      availability: p.availability,
+      condition: p.condition,
+      brand: p.brand,
+      price: { value: p.priceValue, currency: p.priceCurrency },
+    };
+    return (await mcFetch(token, `/${encodeURIComponent(data.merchantId)}/products`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })) as { id: string; title: string };
+  });
+
+export const SAMPLE_PRODUCTS = [
+  {
+    offerId: "sample-001",
+    title: "Classic Cotton T-Shirt",
+    description: "Soft 100% cotton crew-neck tee, perfect for everyday wear.",
+    link: "https://example.com/products/classic-tee",
+    imageLink: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800",
+    priceValue: "24.99",
+    priceCurrency: "USD",
+    brand: "Workspace",
+    availability: "in stock" as const,
+    condition: "new" as const,
+  },
+  {
+    offerId: "sample-002",
+    title: "Wireless Bluetooth Headphones",
+    description: "Over-ear noise-cancelling headphones with 30-hour battery life.",
+    link: "https://example.com/products/bt-headphones",
+    imageLink: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800",
+    priceValue: "149.00",
+    priceCurrency: "USD",
+    brand: "Workspace Audio",
+    availability: "in stock" as const,
+    condition: "new" as const,
+  },
+  {
+    offerId: "sample-003",
+    title: "Stainless Steel Water Bottle",
+    description: "Insulated 750ml bottle keeps drinks cold for 24h or hot for 12h.",
+    link: "https://example.com/products/water-bottle",
+    imageLink: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800",
+    priceValue: "29.50",
+    priceCurrency: "USD",
+    brand: "Workspace Goods",
+    availability: "in stock" as const,
+    condition: "new" as const,
+  },
+];
