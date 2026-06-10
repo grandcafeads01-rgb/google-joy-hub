@@ -479,6 +479,7 @@ export interface MerchantAccount {
 
 export interface MerchantProduct {
   id: string;
+  offerId?: string;
   title: string;
   description?: string;
   price?: { value: string; currency: string };
@@ -486,6 +487,10 @@ export interface MerchantProduct {
   availability?: string;
   link?: string;
   brand?: string;
+  status?: string;
+  issues?: number;
+  clicks?: number;
+  impressions?: number;
 }
 
 export const listMerchantAccounts = createServerFn({ method: "GET" })
