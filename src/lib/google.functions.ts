@@ -458,7 +458,16 @@ async function mcFetch(token: string, path: string, init?: RequestInit) {
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Merchant ${path}: ${res.status} ${body}`);
+    let msg = body;
+    try {
+      const parsed = JSON.parse(body) as { error?: { message?: string; status?: string } };
+      if (parsed.error?.message) {
+        msg = `${parsed.error.status ?? res.status}: ${parsed.error.message}`;
+      }
+    } catch {
+      /* keep raw body */
+    }
+    throw new Error(`Merchant API (${res.status}) ${msg}`);
   }
   return res.json();
 }
