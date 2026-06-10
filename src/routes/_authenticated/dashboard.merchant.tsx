@@ -161,40 +161,79 @@ function MerchantPage() {
 
       {accounts.isLoading && <Skeleton className="h-10 w-full" />}
 
-      {!hasAccounts && (
-        <Card className="p-4 space-y-3">
-          <div>
-            <h3 className="font-medium text-sm">No Merchant Center account detected</h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              Enter your Merchant ID manually, or create one at{" "}
-              <a
-                href="https://merchants.google.com/"
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary underline"
-              >
-                merchants.google.com
-              </a>
-              .
-            </p>
-          </div>
-          <div className="flex items-end gap-2">
-            <div className="flex-1">
-              <Label htmlFor="mid" className="text-xs">Merchant ID</Label>
-              <Input
-                id="mid"
-                placeholder="e.g. 1234567890"
-                value={manualId}
-                onChange={(e) => setManualId(e.target.value.trim())}
-              />
-            </div>
-            <Button
-              onClick={() => setMerchantId(manualId)}
-              disabled={!manualId}
+      {accounts.error && (
+        <Card className="p-4 border-destructive/50 bg-destructive/5">
+          <h3 className="font-medium text-sm text-destructive">
+            Could not auto-detect Merchant Center
+          </h3>
+          <p className="text-xs text-muted-foreground mt-1 break-all">
+            {(accounts.error as Error).message}
+          </p>
+          <p className="text-xs text-muted-foreground mt-2">
+            Usually the Google account isn't directly linked as a user on the
+            Merchant Center, or the OAuth scope was granted before the merchant
+            was created. Enter your Merchant ID manually below.
+          </p>
+        </Card>
+      )}
+
+      {/* Manual Merchant ID input — always available */}
+      <Card className="p-4 space-y-3">
+        <div>
+          <h3 className="font-medium text-sm">
+            {hasAccounts ? "Or use a different Merchant ID" : "Enter Merchant ID manually"}
+          </h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            Find your ID at the top-right of{" "}
+            <a
+              href="https://merchants.google.com/"
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary underline"
             >
-              Use this ID
-            </Button>
+              merchants.google.com
+            </a>
+            . The connected Google account must be a user on that merchant.
+            {merchantId && (
+              <>
+                {" "}Currently using: <span className="font-mono">{merchantId}</span>
+              </>
+            )}
+          </p>
+        </div>
+        <div className="flex items-end gap-2">
+          <div className="flex-1">
+            <Label htmlFor="mid" className="text-xs">Merchant ID (digits only)</Label>
+            <Input
+              id="mid"
+              placeholder="e.g. 1234567890"
+              value={manualId}
+              onChange={(e) => setManualId(e.target.value.replace(/\D/g, ""))}
+            />
           </div>
+          <Button
+            onClick={() => setMerchantId(manualId)}
+            disabled={!manualId || manualId === merchantId}
+          >
+            Use this ID
+          </Button>
+        </div>
+      </Card>
+
+      {products.error && merchantId && (
+        <Card className="p-4 border-destructive/50 bg-destructive/5">
+          <h3 className="font-medium text-sm text-destructive">
+            Merchant Center API error
+          </h3>
+          <p className="text-xs text-muted-foreground mt-1 break-all whitespace-pre-wrap">
+            {(products.error as Error).message}
+          </p>
+          <p className="text-xs text-muted-foreground mt-2">
+            Common causes: wrong Merchant ID, your Google account is not a user
+            on that merchant, Content API not enabled on the merchant, or the
+            OAuth <code>content</code> scope wasn't granted — disconnect &amp;
+            reconnect Google in Settings.
+          </p>
         </Card>
       )}
 
