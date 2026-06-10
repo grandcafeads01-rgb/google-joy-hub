@@ -530,24 +530,91 @@ export const listMerchantProducts = createServerFn({ method: "GET" })
   .inputValidator((d) => z.object({ merchantId: z.string().min(1) }).parse(d))
   .handler(async ({ data, context }) => {
     const token = await getValidAccessToken(context.userId);
-    const json = (await mcFetch(
-      token,
-      `/${encodeURIComponent(data.merchantId)}/products?maxResults=50`,
-    )) as { resources?: any[] };
-    const products: MerchantProduct[] = (json.resources ?? []).map((p) => ({
-      id: p.id,
-      title: p.title,
-      description: p.description,
-      price: p.price,
-      imageLink: p.imageLink,
-      availability: p.availability,
-      link: p.link,
-      brand: p.brand,
-    }));
+    const mid = encodeURIComponent(data.merchantId);
+
+    const json = (await mcFetch(token, `/${mid}/products?maxResults=50`)) as {
+      resources?: Array<{
+        id: string;
+        offerId?: string;
+        title: string;
+        description?: string;
+        price?: { value: string; currency: string };
+        imageLink?: string;
+        availability?: string;
+        link?: string;
+        brand?: string;
+      }>;
+    };
+
+    // Status (approval/disapproval) per product
+    const statusMap = new Map<string, { status: string; issues: number }>();
+    try {
+      const st = (await mcFetch(token, `/${mid}/productstatuses?maxResults=50`)) as {
+        resources?: Array<{
+          productId: string;
+          destinationStatuses?: { status?: string }[];
+          itemLevelIssues?: unknown[];
+        }>;
+      };
+      for (const s of st.resources ?? []) {
+        const status = s.destinationStatuses?.[0]?.status ?? "pending";
+        statusMap.set(s.productId, { status, issues: s.itemLevelIssues?.length ?? 0 });
+      }
+    } catch {
+      /* status optional */
+    }
+
+    // Traffic via Reports API (last 30 days)
+    const trafficMap = new Map<string, { clicks: number; impressions: number }>();
+    try {
+      const rep = (await mcFetch(token, `/${mid}/reports/search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query:
+            "SELECT segments.offer_id, metrics.clicks, metrics.impressions FROM MerchantPerformanceView WHERE segments.date DURING LAST_30_DAYS",
+        }),
+      })) as {
+        results?: Array<{
+          segments?: { offerId?: string };
+          metrics?: { clicks?: string | number; impressions?: string | number };
+        }>;
+      };
+      for (const r of rep.results ?? []) {
+        const oid = r.segments?.offerId;
+        if (!oid) continue;
+        trafficMap.set(oid, {
+          clicks: Number(r.metrics?.clicks ?? 0),
+          impressions: Number(r.metrics?.impressions ?? 0),
+        });
+      }
+    } catch {
+      /* traffic optional */
+    }
+
+    const products: MerchantProduct[] = (json.resources ?? []).map((p) => {
+      const st = statusMap.get(p.id);
+      const tr = p.offerId ? trafficMap.get(p.offerId) : undefined;
+      return {
+        id: p.id,
+        offerId: p.offerId,
+        title: p.title,
+        description: p.description,
+        price: p.price,
+        imageLink: p.imageLink,
+        availability: p.availability,
+        link: p.link,
+        brand: p.brand,
+        status: st?.status,
+        issues: st?.issues,
+        clicks: tr?.clicks,
+        impressions: tr?.impressions,
+      };
+    });
     return { products };
   });
 
-const sampleProductSchema = z.object({
+const productSchema = z.object({
   offerId: z.string().min(1).max(255),
   title: z.string().min(1).max(255),
   description: z.string().min(1).max(5000),
@@ -560,10 +627,12 @@ const sampleProductSchema = z.object({
   condition: z.enum(["new", "refurbished", "used"]).default("new"),
 });
 
+export type MerchantProductInput = z.infer<typeof productSchema>;
+
 export const insertMerchantProduct = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
-    z.object({ merchantId: z.string().min(1), product: sampleProductSchema }).parse(d),
+    z.object({ merchantId: z.string().min(1), product: productSchema }).parse(d),
   )
   .handler(async ({ data, context }) => {
     const token = await getValidAccessToken(context.userId);
@@ -589,41 +658,3 @@ export const insertMerchantProduct = createServerFn({ method: "POST" })
     })) as { id: string; title: string };
   });
 
-export const SAMPLE_PRODUCTS = [
-  {
-    offerId: "sample-001",
-    title: "Classic Cotton T-Shirt",
-    description: "Soft 100% cotton crew-neck tee, perfect for everyday wear.",
-    link: "https://example.com/products/classic-tee",
-    imageLink: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800",
-    priceValue: "24.99",
-    priceCurrency: "USD",
-    brand: "Workspace",
-    availability: "in stock" as const,
-    condition: "new" as const,
-  },
-  {
-    offerId: "sample-002",
-    title: "Wireless Bluetooth Headphones",
-    description: "Over-ear noise-cancelling headphones with 30-hour battery life.",
-    link: "https://example.com/products/bt-headphones",
-    imageLink: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800",
-    priceValue: "149.00",
-    priceCurrency: "USD",
-    brand: "Workspace Audio",
-    availability: "in stock" as const,
-    condition: "new" as const,
-  },
-  {
-    offerId: "sample-003",
-    title: "Stainless Steel Water Bottle",
-    description: "Insulated 750ml bottle keeps drinks cold for 24h or hot for 12h.",
-    link: "https://example.com/products/water-bottle",
-    imageLink: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800",
-    priceValue: "29.50",
-    priceCurrency: "USD",
-    brand: "Workspace Goods",
-    availability: "in stock" as const,
-    condition: "new" as const,
-  },
-];
