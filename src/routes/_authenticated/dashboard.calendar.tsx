@@ -13,6 +13,8 @@ import {
   Video,
   ExternalLink,
   Link2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   listCalendars,
@@ -43,9 +45,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/dashboard/calendar")({
   head: () => ({ meta: [{ title: "Calendar — Workspace" }] }),
@@ -65,30 +67,47 @@ type FormState = {
 const tz =
   typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC";
 
-function toLocalInput(iso?: string) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function pad(n: number) {
+  return String(n).padStart(2, "0");
+}
+function toLocalInput(d: Date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
     d.getHours(),
   )}:${pad(d.getMinutes())}`;
 }
-
-function emptyForm(): FormState {
-  const now = new Date();
-  const start = new Date(now.getTime() + 60 * 60 * 1000);
-  start.setMinutes(0, 0, 0);
-  const end = new Date(start.getTime() + 60 * 60 * 1000);
+function isoToLocalInput(iso?: string) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return toLocalInput(d);
+}
+function emptyForm(base?: Date): FormState {
+  const now = base ? new Date(base) : new Date();
+  if (!base) now.setTime(now.getTime() + 60 * 60 * 1000);
+  now.setMinutes(0, 0, 0);
+  const end = new Date(now.getTime() + 60 * 60 * 1000);
   return {
     summary: "",
     description: "",
     location: "",
-    startDateTime: toLocalInput(start.toISOString()),
-    endDateTime: toLocalInput(end.toISOString()),
+    startDateTime: toLocalInput(now),
+    endDateTime: toLocalInput(end),
     attendees: "",
     addMeet: false,
   };
+}
+
+function eventColor(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  const hue = h % 360;
+  return `hsl(${hue} 70% 45%)`;
 }
 
 function CalendarPage() {
@@ -100,10 +119,26 @@ function CalendarPage() {
   const deleteFn = useServerFn(deleteCalendarEvent);
   const startOAuth = useServerFn(startGoogleOAuth);
 
+  const today = new Date();
   const [calendarId, setCalendarId] = useState("primary");
+  const [year, setYear] = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth()); // 0-11
+
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
+
+  // Visible window: include leading/trailing days shown in the grid
+  const { gridStart, gridEnd, monthStart, monthEnd, daysInMonth, leadingBlank } = useMemo(() => {
+    const monthStart = new Date(year, month, 1);
+    const monthEnd = new Date(year, month + 1, 0);
+    const daysInMonth = monthEnd.getDate();
+    const leadingBlank = monthStart.getDay(); // 0..6
+    const gridStart = new Date(year, month, 1 - leadingBlank);
+    const totalCells = Math.ceil((leadingBlank + daysInMonth) / 7) * 7;
+    const gridEnd = new Date(year, month, 1 - leadingBlank + totalCells);
+    return { gridStart, gridEnd, monthStart, monthEnd, daysInMonth, leadingBlank };
+  }, [year, month]);
 
   const cals = useQuery({
     queryKey: ["calendars"],
@@ -111,8 +146,16 @@ function CalendarPage() {
   });
 
   const events = useQuery({
-    queryKey: ["calendar-events", calendarId],
-    queryFn: () => fetchEvents({ data: { calendarId } }),
+    queryKey: ["calendar-events", calendarId, gridStart.toISOString(), gridEnd.toISOString()],
+    queryFn: () =>
+      fetchEvents({
+        data: {
+          calendarId,
+          timeMin: gridStart.toISOString(),
+          timeMax: gridEnd.toISOString(),
+          maxResults: 2500,
+        },
+      }),
     enabled: cals.data?.connected !== false,
   });
 
@@ -179,21 +222,29 @@ function CalendarPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
-  const grouped = useMemo(() => {
-    const list = events.data?.events ?? [];
+  // Bucket events by YYYY-MM-DD (local date)
+  const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
-    for (const ev of list) {
-      const iso = ev.start.dateTime ?? ev.start.date ?? "";
-      const day = iso.slice(0, 10);
-      if (!map.has(day)) map.set(day, []);
-      map.get(day)!.push(ev);
+    for (const ev of events.data?.events ?? []) {
+      const iso = ev.start.dateTime ?? ev.start.date;
+      if (!iso) continue;
+      const d = new Date(iso);
+      const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(ev);
     }
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+    return map;
   }, [events.data]);
 
-  const openCreate = () => {
+  const totalCells = Math.ceil((leadingBlank + daysInMonth) / 7) * 7;
+  const cells = Array.from({ length: totalCells }, (_, i) => {
+    const d = new Date(year, month, 1 - leadingBlank + i);
+    return d;
+  });
+
+  const openCreate = (base?: Date) => {
     setEditing(null);
-    setForm(emptyForm());
+    setForm(emptyForm(base));
     setOpen(true);
   };
 
@@ -203,8 +254,8 @@ function CalendarPage() {
       summary: ev.summary ?? "",
       description: ev.description ?? "",
       location: ev.location ?? "",
-      startDateTime: toLocalInput(ev.start.dateTime ?? ev.start.date),
-      endDateTime: toLocalInput(ev.end.dateTime ?? ev.end.date),
+      startDateTime: isoToLocalInput(ev.start.dateTime ?? ev.start.date),
+      endDateTime: isoToLocalInput(ev.end.dateTime ?? ev.end.date),
       attendees: (ev.attendees ?? []).map((a) => a.email).join(", "),
       addMeet: false,
     });
@@ -216,6 +267,31 @@ function CalendarPage() {
     if (editing) updateMut.mutate({ ...form, eventId: editing.id });
     else createMut.mutate(form);
   };
+
+  const goPrev = () => {
+    const m = month - 1;
+    if (m < 0) {
+      setMonth(11);
+      setYear(year - 1);
+    } else setMonth(m);
+  };
+  const goNext = () => {
+    const m = month + 1;
+    if (m > 11) {
+      setMonth(0);
+      setYear(year + 1);
+    } else setMonth(m);
+  };
+  const goToday = () => {
+    setMonth(today.getMonth());
+    setYear(today.getFullYear());
+  };
+
+  const years = useMemo(() => {
+    const arr: number[] = [];
+    for (let y = today.getFullYear() - 5; y <= today.getFullYear() + 5; y++) arr.push(y);
+    return arr;
+  }, [today]);
 
   if (cals.data && cals.data.connected === false) {
     return (
@@ -241,13 +317,15 @@ function CalendarPage() {
     );
   }
 
+  const todayKey = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+
   return (
     <div className="p-6 lg:p-8 space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-display text-3xl font-bold tracking-tight">Calendar</h1>
           <p className="text-muted-foreground mt-1">
-            Upcoming events from your Google Calendar.
+            Browse and manage your Google Calendar events.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -265,108 +343,143 @@ function CalendarPage() {
               {!cals.data && <SelectItem value="primary">Primary</SelectItem>}
             </SelectContent>
           </Select>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={openCreate}>
-                <Plus className="size-4 mr-2" /> New event
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle>{editing ? "Edit event" : "Create event"}</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3">
-                <div>
-                  <Label>Title</Label>
-                  <Input
-                    value={form.summary}
-                    onChange={(e) => setForm({ ...form, summary: e.target.value })}
-                    placeholder="Team sync"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Start</Label>
-                    <Input
-                      type="datetime-local"
-                      value={form.startDateTime}
-                      onChange={(e) =>
-                        setForm({ ...form, startDateTime: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <Label>End</Label>
-                    <Input
-                      type="datetime-local"
-                      value={form.endDateTime}
-                      onChange={(e) =>
-                        setForm({ ...form, endDateTime: e.target.value })
-                      }
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label>Location</Label>
-                  <Input
-                    value={form.location}
-                    onChange={(e) => setForm({ ...form, location: e.target.value })}
-                    placeholder="Optional"
-                  />
-                </div>
-                <div>
-                  <Label>Attendees (comma-separated emails)</Label>
-                  <Input
-                    value={form.attendees}
-                    onChange={(e) => setForm({ ...form, attendees: e.target.value })}
-                    placeholder="a@x.com, b@y.com"
-                  />
-                </div>
-                <div>
-                  <Label>Description</Label>
-                  <Textarea
-                    rows={3}
-                    value={form.description}
-                    onChange={(e) =>
-                      setForm({ ...form, description: e.target.value })
-                    }
-                  />
-                </div>
-                {!editing && (
-                  <div className="flex items-center justify-between rounded-md border p-3">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Video className="size-4" /> Add Google Meet link
-                    </div>
-                    <Switch
-                      checked={form.addMeet}
-                      onCheckedChange={(v) => setForm({ ...form, addMeet: v })}
-                    />
-                  </div>
-                )}
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={submit}
-                  disabled={createMut.isPending || updateMut.isPending}
-                >
-                  {editing ? "Save changes" : "Create"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button onClick={() => openCreate()}>
+            <Plus className="size-4 mr-2" /> New event
+          </Button>
         </div>
       </div>
 
-      {events.isLoading && (
-        <div className="space-y-2">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 w-full" />
-          ))}
-        </div>
-      )}
+      {/* Month/Year selector */}
+      <Card>
+        <CardContent className="p-3 md:p-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={goPrev}>
+                <ChevronLeft className="size-4" />
+              </Button>
+              <Button variant="outline" size="icon" onClick={goNext}>
+                <ChevronRight className="size-4" />
+              </Button>
+              <Button variant="ghost" onClick={goToday}>
+                Today
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map((m, i) => (
+                    <SelectItem key={m} value={String(i)}>
+                      {m}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+                <SelectTrigger className="w-[110px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {years.map((y) => (
+                    <SelectItem key={y} value={String(y)}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="font-display text-xl font-semibold">
+              {MONTHS[month]} {year}
+            </div>
+          </div>
+
+          {/* Weekday header */}
+          <div className="mt-4 grid grid-cols-7 border-b">
+            {WEEKDAYS.map((d) => (
+              <div
+                key={d}
+                className="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                {d}
+              </div>
+            ))}
+          </div>
+
+          {/* Month grid */}
+          {events.isLoading ? (
+            <div className="grid grid-cols-7 gap-px bg-border mt-px">
+              {Array.from({ length: totalCells }).map((_, i) => (
+                <Skeleton key={i} className="h-28 md:h-32 rounded-none" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-7 gap-px bg-border mt-px">
+              {cells.map((d, i) => {
+                const inMonth = d.getMonth() === month;
+                const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                const dayEvents = eventsByDay.get(key) ?? [];
+                const isToday = key === todayKey;
+                return (
+                  <div
+                    key={i}
+                    className={cn(
+                      "bg-background min-h-28 md:min-h-32 p-1.5 flex flex-col gap-1 group cursor-pointer transition-colors hover:bg-muted/40",
+                      !inMonth && "bg-muted/20 text-muted-foreground",
+                    )}
+                    onClick={() => {
+                      const base = new Date(d);
+                      base.setHours(9, 0, 0, 0);
+                      openCreate(base);
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={cn(
+                          "inline-flex items-center justify-center text-xs font-medium h-6 min-w-6 px-1.5 rounded-full",
+                          isToday && "bg-primary text-primary-foreground",
+                        )}
+                      >
+                        {d.getDate()}
+                      </span>
+                      {dayEvents.length > 3 && (
+                        <span className="text-[10px] text-muted-foreground">
+                          +{dayEvents.length - 3}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-0.5 overflow-hidden">
+                      {dayEvents.slice(0, 3).map((ev) => (
+                        <button
+                          key={ev.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEdit(ev);
+                          }}
+                          className="text-left text-[11px] truncate rounded px-1.5 py-0.5 text-white hover:opacity-90"
+                          style={{ backgroundColor: eventColor(ev.id) }}
+                          title={ev.summary || "(no title)"}
+                        >
+                          {ev.start.dateTime && (
+                            <span className="opacity-80 mr-1">
+                              {new Date(ev.start.dateTime).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          )}
+                          {ev.summary || "(no title)"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {events.error && (
         <Card className="border-destructive">
@@ -379,94 +492,152 @@ function CalendarPage() {
         </Card>
       )}
 
-      {!events.isLoading && grouped.length === 0 && !events.error && (
-        <Card>
-          <CardContent className="p-8 text-center text-muted-foreground">
-            No upcoming events.
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="space-y-6">
-        {grouped.map(([day, items]) => (
-          <div key={day}>
-            <div className="text-sm font-semibold text-muted-foreground mb-2">
-              {new Date(day).toLocaleDateString(undefined, {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-              })}
+      {/* Create/Edit dialog */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit event" : "Create event"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Title</Label>
+              <Input
+                value={form.summary}
+                onChange={(e) => setForm({ ...form, summary: e.target.value })}
+                placeholder="Team sync"
+              />
             </div>
-            <div className="space-y-2">
-              {items.map((ev) => (
-                <Card key={ev.id} className="hover:bg-muted/40 transition-colors">
-                  <CardContent className="p-4 flex items-start gap-4">
-                    <div className="text-sm font-medium w-24 shrink-0 text-muted-foreground">
-                      {ev.start.dateTime
-                        ? new Date(ev.start.dateTime).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
-                        : "All day"}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{ev.summary || "(no title)"}</div>
-                      <div className="text-xs text-muted-foreground flex flex-wrap gap-3 mt-1">
-                        {ev.location && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="size-3" /> {ev.location}
-                          </span>
-                        )}
-                        {ev.attendees && ev.attendees.length > 0 && (
-                          <span className="flex items-center gap-1">
-                            <Users className="size-3" /> {ev.attendees.length}
-                          </span>
-                        )}
-                        {ev.hangoutLink && (
-                          <a
-                            href={ev.hangoutLink}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-1 text-primary hover:underline"
-                          >
-                            <Video className="size-3" /> Meet
-                          </a>
-                        )}
-                        {ev.status && (
-                          <Badge variant="outline" className="text-[10px] py-0">
-                            {ev.status}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {ev.htmlLink && (
-                        <Button asChild size="icon" variant="ghost">
-                          <a href={ev.htmlLink} target="_blank" rel="noreferrer">
-                            <ExternalLink className="size-4" />
-                          </a>
-                        </Button>
-                      )}
-                      <Button size="icon" variant="ghost" onClick={() => openEdit(ev)}>
-                        <Pencil className="size-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          if (confirm("Delete this event?")) deleteMut.mutate(ev.id);
-                        }}
-                      >
-                        <Trash2 className="size-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Start</Label>
+                <Input
+                  type="datetime-local"
+                  value={form.startDateTime}
+                  onChange={(e) => setForm({ ...form, startDateTime: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>End</Label>
+                <Input
+                  type="datetime-local"
+                  value={form.endDateTime}
+                  onChange={(e) => setForm({ ...form, endDateTime: e.target.value })}
+                />
+              </div>
             </div>
+            <div>
+              <Label>Location</Label>
+              <Input
+                value={form.location}
+                onChange={(e) => setForm({ ...form, location: e.target.value })}
+                placeholder="Optional"
+              />
+            </div>
+            <div>
+              <Label>Attendees (comma-separated emails)</Label>
+              <Input
+                value={form.attendees}
+                onChange={(e) => setForm({ ...form, attendees: e.target.value })}
+                placeholder="a@x.com, b@y.com"
+              />
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Textarea
+                rows={3}
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
+            </div>
+            {!editing && (
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <Video className="size-4" /> Add Google Meet link
+                </div>
+                <Switch
+                  checked={form.addMeet}
+                  onCheckedChange={(v) => setForm({ ...form, addMeet: v })}
+                />
+              </div>
+            )}
+            {editing && (
+              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground border-t pt-3">
+                {editing.location && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="size-3" /> {editing.location}
+                  </span>
+                )}
+                {editing.attendees && editing.attendees.length > 0 && (
+                  <span className="flex items-center gap-1">
+                    <Users className="size-3" /> {editing.attendees.length}
+                  </span>
+                )}
+                {editing.hangoutLink && (
+                  <a
+                    href={editing.hangoutLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 text-primary hover:underline"
+                  >
+                    <Video className="size-3" /> Meet
+                  </a>
+                )}
+                {editing.htmlLink && (
+                  <a
+                    href={editing.htmlLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 text-primary hover:underline"
+                  >
+                    <ExternalLink className="size-3" /> Open in Google
+                  </a>
+                )}
+                {editing.status && (
+                  <Badge variant="outline" className="text-[10px] py-0">
+                    {editing.status}
+                  </Badge>
+                )}
+              </div>
+            )}
           </div>
-        ))}
-      </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <div>
+              {editing && (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    if (confirm("Delete this event?")) {
+                      deleteMut.mutate(editing.id);
+                      setOpen(false);
+                    }
+                  }}
+                >
+                  <Trash2 className="size-4 mr-1 text-destructive" /> Delete
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={submit}
+                disabled={createMut.isPending || updateMut.isPending}
+              >
+                {editing ? (
+                  <>
+                    <Pencil className="size-4 mr-1" /> Save
+                  </>
+                ) : (
+                  <>
+                    <Plus className="size-4 mr-1" /> Create
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
