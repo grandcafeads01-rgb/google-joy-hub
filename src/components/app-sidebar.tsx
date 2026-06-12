@@ -6,6 +6,7 @@ import {
   Mail,
   HardDrive,
   ShoppingBag,
+  Calendar as CalendarIcon,
   Settings,
   LogOut,
   Inbox,
@@ -178,6 +179,18 @@ export function AppSidebar() {
                   <Link to="/dashboard/merchant" className="flex items-center gap-2">
                     <ShoppingBag className="size-4" />
                     {!collapsed && <span>Merchant Center</span>}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={currentPath.startsWith("/dashboard/calendar")}
+                  tooltip="Calendar"
+                >
+                  <Link to="/dashboard/calendar" className="flex items-center gap-2">
+                    <CalendarIcon className="size-4" />
+                    {!collapsed && <span>Calendar</span>}
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
