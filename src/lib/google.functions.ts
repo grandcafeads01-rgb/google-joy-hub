@@ -658,3 +658,190 @@ export const insertMerchantProduct = createServerFn({ method: "POST" })
     })) as { id: string; title: string };
   });
 
+
+/* --------------------------------- Calendar ------------------------------- */
+
+const CAL_BASE = "https://www.googleapis.com/calendar/v3";
+
+async function calFetch(token: string, path: string, init?: RequestInit) {
+  const res = await fetch(`${CAL_BASE}${path}`, {
+    ...init,
+    headers: { ...(init?.headers || {}), Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    let msg = body;
+    try {
+      const parsed = JSON.parse(body) as { error?: { message?: string } };
+      if (parsed.error?.message) msg = parsed.error.message;
+    } catch { /* keep */ }
+    throw new Error(`Calendar API (${res.status}) ${msg}`);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+export interface CalendarListItem {
+  id: string;
+  summary: string;
+  description?: string;
+  backgroundColor?: string;
+  foregroundColor?: string;
+  primary?: boolean;
+  accessRole?: string;
+}
+
+export interface CalendarEvent {
+  id: string;
+  summary: string;
+  description?: string;
+  location?: string;
+  start: { dateTime?: string; date?: string; timeZone?: string };
+  end: { dateTime?: string; date?: string; timeZone?: string };
+  htmlLink?: string;
+  status?: string;
+  attendees?: { email: string; responseStatus?: string }[];
+  hangoutLink?: string;
+  organizer?: { email?: string; displayName?: string };
+}
+
+export const listCalendars = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    try {
+      const token = await getValidAccessToken(context.userId);
+      const json = (await calFetch(token, "/users/me/calendarList?maxResults=250")) as {
+        items?: CalendarListItem[];
+      };
+      return { connected: true as const, calendars: json.items ?? [] };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg === "NO_GOOGLE_CONNECTION")
+        return { connected: false as const, calendars: [] as CalendarListItem[] };
+      throw e;
+    }
+  });
+
+export const listCalendarEvents = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z.object({
+      calendarId: z.string().min(1).default("primary"),
+      timeMin: z.string().optional(),
+      timeMax: z.string().optional(),
+      q: z.string().optional(),
+      maxResults: z.number().int().min(1).max(2500).optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    try {
+      const token = await getValidAccessToken(context.userId);
+      const params = new URLSearchParams({
+        singleEvents: "true",
+        orderBy: "startTime",
+        maxResults: String(data.maxResults ?? 50),
+        timeMin: data.timeMin ?? new Date().toISOString(),
+      });
+      if (data.timeMax) params.set("timeMax", data.timeMax);
+      if (data.q) params.set("q", data.q);
+      const json = (await calFetch(
+        token,
+        `/calendars/${encodeURIComponent(data.calendarId)}/events?${params.toString()}`,
+      )) as { items?: CalendarEvent[] };
+      return { connected: true as const, events: json.items ?? [] };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg === "NO_GOOGLE_CONNECTION")
+        return { connected: false as const, events: [] as CalendarEvent[] };
+      throw e;
+    }
+  });
+
+const eventInputSchema = z.object({
+  calendarId: z.string().min(1).default("primary"),
+  summary: z.string().min(1).max(1024),
+  description: z.string().max(8192).optional(),
+  location: z.string().max(1024).optional(),
+  startDateTime: z.string().min(1), // ISO
+  endDateTime: z.string().min(1),
+  timeZone: z.string().optional(),
+  attendees: z.array(z.string().email()).optional(),
+  addMeet: z.boolean().optional(),
+});
+
+export const createCalendarEvent = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => eventInputSchema.parse(d))
+  .handler(async ({ data, context }) => {
+    const token = await getValidAccessToken(context.userId);
+    const body: Record<string, unknown> = {
+      summary: data.summary,
+      description: data.description,
+      location: data.location,
+      start: { dateTime: data.startDateTime, timeZone: data.timeZone },
+      end: { dateTime: data.endDateTime, timeZone: data.timeZone },
+      attendees: data.attendees?.map((email) => ({ email })),
+    };
+    if (data.addMeet) {
+      body.conferenceData = {
+        createRequest: {
+          requestId: crypto.randomUUID(),
+          conferenceSolutionKey: { type: "hangoutsMeet" },
+        },
+      };
+    }
+    const qs = data.addMeet ? "?conferenceDataVersion=1" : "";
+    return (await calFetch(
+      token,
+      `/calendars/${encodeURIComponent(data.calendarId)}/events${qs}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    )) as CalendarEvent;
+  });
+
+export const updateCalendarEvent = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    eventInputSchema.extend({ eventId: z.string().min(1) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const token = await getValidAccessToken(context.userId);
+    const body = {
+      summary: data.summary,
+      description: data.description,
+      location: data.location,
+      start: { dateTime: data.startDateTime, timeZone: data.timeZone },
+      end: { dateTime: data.endDateTime, timeZone: data.timeZone },
+      attendees: data.attendees?.map((email) => ({ email })),
+    };
+    return (await calFetch(
+      token,
+      `/calendars/${encodeURIComponent(data.calendarId)}/events/${encodeURIComponent(data.eventId)}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    )) as CalendarEvent;
+  });
+
+export const deleteCalendarEvent = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z.object({
+      calendarId: z.string().min(1).default("primary"),
+      eventId: z.string().min(1),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const token = await getValidAccessToken(context.userId);
+    await calFetch(
+      token,
+      `/calendars/${encodeURIComponent(data.calendarId)}/events/${encodeURIComponent(data.eventId)}`,
+      { method: "DELETE" },
+    );
+    return { ok: true };
+  });
