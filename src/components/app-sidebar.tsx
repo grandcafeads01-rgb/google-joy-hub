@@ -185,6 +185,18 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
+                  isActive={currentPath.startsWith("/dashboard/calendar")}
+                  tooltip="Calendar"
+                >
+                  <Link to="/dashboard/calendar" className="flex items-center gap-2">
+                    <CalendarIcon className="size-4" />
+                    {!collapsed && <span>Calendar</span>}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
                   isActive={currentPath.startsWith("/dashboard/settings")}
                   tooltip="Settings"
                 >
