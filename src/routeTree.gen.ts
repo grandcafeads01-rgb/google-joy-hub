@@ -19,6 +19,7 @@ import { Route as AuthenticatedDashboardSettingsRouteImport } from './routes/_au
 import { Route as AuthenticatedDashboardMerchantRouteImport } from './routes/_authenticated/dashboard.merchant'
 import { Route as AuthenticatedDashboardGmailRouteImport } from './routes/_authenticated/dashboard.gmail'
 import { Route as AuthenticatedDashboardDriveRouteImport } from './routes/_authenticated/dashboard.drive'
+import { Route as AuthenticatedDashboardCalendarRouteImport } from './routes/_authenticated/dashboard.calendar'
 import { Route as AuthenticatedDashboardGmailComposeRouteImport } from './routes/_authenticated/dashboard.gmail.compose'
 import { Route as AuthenticatedDashboardGmailMessageIdRouteImport } from './routes/_authenticated/dashboard.gmail.$messageId'
 
@@ -76,6 +77,12 @@ const AuthenticatedDashboardDriveRoute =
     path: '/drive',
     getParentRoute: () => AuthenticatedDashboardRoute,
   } as any)
+const AuthenticatedDashboardCalendarRoute =
+  AuthenticatedDashboardCalendarRouteImport.update({
+    id: '/calendar',
+    path: '/calendar',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
 const AuthenticatedDashboardGmailComposeRoute =
   AuthenticatedDashboardGmailComposeRouteImport.update({
     id: '/compose',
@@ -93,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/dashboard': typeof AuthenticatedDashboardRouteWithChildren
+  '/dashboard/calendar': typeof AuthenticatedDashboardCalendarRoute
   '/dashboard/drive': typeof AuthenticatedDashboardDriveRoute
   '/dashboard/gmail': typeof AuthenticatedDashboardGmailRouteWithChildren
   '/dashboard/merchant': typeof AuthenticatedDashboardMerchantRoute
@@ -105,6 +113,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/dashboard/calendar': typeof AuthenticatedDashboardCalendarRoute
   '/dashboard/drive': typeof AuthenticatedDashboardDriveRoute
   '/dashboard/gmail': typeof AuthenticatedDashboardGmailRouteWithChildren
   '/dashboard/merchant': typeof AuthenticatedDashboardMerchantRoute
@@ -120,6 +129,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRouteWithChildren
+  '/_authenticated/dashboard/calendar': typeof AuthenticatedDashboardCalendarRoute
   '/_authenticated/dashboard/drive': typeof AuthenticatedDashboardDriveRoute
   '/_authenticated/dashboard/gmail': typeof AuthenticatedDashboardGmailRouteWithChildren
   '/_authenticated/dashboard/merchant': typeof AuthenticatedDashboardMerchantRoute
@@ -135,6 +145,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/dashboard'
+    | '/dashboard/calendar'
     | '/dashboard/drive'
     | '/dashboard/gmail'
     | '/dashboard/merchant'
@@ -147,6 +158,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/dashboard/calendar'
     | '/dashboard/drive'
     | '/dashboard/gmail'
     | '/dashboard/merchant'
@@ -161,6 +173,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/login'
     | '/_authenticated/dashboard'
+    | '/_authenticated/dashboard/calendar'
     | '/_authenticated/dashboard/drive'
     | '/_authenticated/dashboard/gmail'
     | '/_authenticated/dashboard/merchant'
@@ -250,6 +263,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardDriveRouteImport
       parentRoute: typeof AuthenticatedDashboardRoute
     }
+    '/_authenticated/dashboard/calendar': {
+      id: '/_authenticated/dashboard/calendar'
+      path: '/calendar'
+      fullPath: '/dashboard/calendar'
+      preLoaderRoute: typeof AuthenticatedDashboardCalendarRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
+    }
     '/_authenticated/dashboard/gmail/compose': {
       id: '/_authenticated/dashboard/gmail/compose'
       path: '/compose'
@@ -286,6 +306,7 @@ const AuthenticatedDashboardGmailRouteWithChildren =
   )
 
 interface AuthenticatedDashboardRouteChildren {
+  AuthenticatedDashboardCalendarRoute: typeof AuthenticatedDashboardCalendarRoute
   AuthenticatedDashboardDriveRoute: typeof AuthenticatedDashboardDriveRoute
   AuthenticatedDashboardGmailRoute: typeof AuthenticatedDashboardGmailRouteWithChildren
   AuthenticatedDashboardMerchantRoute: typeof AuthenticatedDashboardMerchantRoute
@@ -295,6 +316,7 @@ interface AuthenticatedDashboardRouteChildren {
 
 const AuthenticatedDashboardRouteChildren: AuthenticatedDashboardRouteChildren =
   {
+    AuthenticatedDashboardCalendarRoute: AuthenticatedDashboardCalendarRoute,
     AuthenticatedDashboardDriveRoute: AuthenticatedDashboardDriveRoute,
     AuthenticatedDashboardGmailRoute:
       AuthenticatedDashboardGmailRouteWithChildren,
@@ -329,3 +351,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
