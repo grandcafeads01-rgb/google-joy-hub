@@ -6,6 +6,7 @@ import {
   Mail,
   HardDrive,
   ShoppingBag,
+  Calendar as CalendarIcon,
   Settings,
   LogOut,
   Inbox,
