@@ -937,6 +937,7 @@ export const getAnalyticsOverview = createServerFn({ method: "POST" })
           { name: "averageSessionDuration" },
           { name: "bounceRate" },
         ],
+        metricAggregations: ["TOTAL"],
       }),
       runReport({
         dateRanges,
