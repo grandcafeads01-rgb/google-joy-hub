@@ -7,6 +7,7 @@ import {
   HardDrive,
   ShoppingBag,
   Calendar as CalendarIcon,
+  BarChart3,
   Settings,
   LogOut,
   Inbox,
