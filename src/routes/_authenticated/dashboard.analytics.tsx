@@ -38,11 +38,31 @@ import {
   ResponsiveContainer,
   AreaChart,
   Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
   CartesianGrid,
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
+
+const CHART_COLORS = [
+  "#6366f1", "#ec4899", "#f59e0b", "#10b981",
+  "#06b6d4", "#8b5cf6", "#ef4444", "#84cc16",
+  "#f97316", "#14b8a6",
+];
+const METRIC_COLORS = {
+  activeUsers: "#6366f1",
+  newUsers: "#10b981",
+  sessions: "#ec4899",
+  pageViews: "#f59e0b",
+  avgSessionDuration: "#06b6d4",
+  bounceRate: "#ef4444",
+} as const;
 
 export const Route = createFileRoute("/_authenticated/dashboard/analytics")({
   component: AnalyticsPage,
