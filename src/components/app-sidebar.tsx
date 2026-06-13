@@ -7,6 +7,7 @@ import {
   HardDrive,
   ShoppingBag,
   Calendar as CalendarIcon,
+  BarChart3,
   Settings,
   LogOut,
   Inbox,
@@ -191,6 +192,18 @@ export function AppSidebar() {
                   <Link to="/dashboard/calendar" className="flex items-center gap-2">
                     <CalendarIcon className="size-4" />
                     {!collapsed && <span>Calendar</span>}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={currentPath.startsWith("/dashboard/analytics")}
+                  tooltip="Analytics"
+                >
+                  <Link to="/dashboard/analytics" className="flex items-center gap-2">
+                    <BarChart3 className="size-4" />
+                    {!collapsed && <span>Analytics</span>}
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

@@ -845,3 +845,154 @@ export const deleteCalendarEvent = createServerFn({ method: "POST" })
     );
     return { ok: true };
   });
+
+/* -------------------------------- Analytics ------------------------------- */
+
+export interface GA4Account {
+  name: string; // accounts/123
+  displayName: string;
+}
+export interface GA4Property {
+  name: string; // properties/123
+  displayName: string;
+  parent: string;
+  timeZone?: string;
+  currencyCode?: string;
+}
+
+export const listAnalyticsAccounts = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const token = await getValidAccessToken(context.userId);
+    const res = await fetch(
+      "https://analyticsadmin.googleapis.com/v1beta/accountSummaries?pageSize=200",
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!res.ok) throw new Error(`Analytics accounts: ${res.status} ${await res.text()}`);
+    const json = (await res.json()) as {
+      accountSummaries?: Array<{
+        account: string;
+        displayName: string;
+        propertySummaries?: Array<{ property: string; displayName: string }>;
+      }>;
+    };
+    const accounts: Array<GA4Account & { properties: GA4Property[] }> = (
+      json.accountSummaries ?? []
+    ).map((a) => ({
+      name: a.account,
+      displayName: a.displayName,
+      properties: (a.propertySummaries ?? []).map((p) => ({
+        name: p.property,
+        displayName: p.displayName,
+        parent: a.account,
+      })),
+    }));
+    return { accounts };
+  });
+
+export const getAnalyticsOverview = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z.object({
+      propertyId: z.string().min(1), // "properties/123" or "123"
+      days: z.number().int().min(1).max(365).default(28),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const token = await getValidAccessToken(context.userId);
+    const prop = data.propertyId.startsWith("properties/")
+      ? data.propertyId
+      : `properties/${data.propertyId}`;
+    const startDate = `${data.days}daysAgo`;
+
+    const runReport = async (body: unknown) => {
+      const res = await fetch(
+        `https://analyticsdata.googleapis.com/v1beta/${prop}:runReport`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        },
+      );
+      if (!res.ok) throw new Error(`GA report: ${res.status} ${await res.text()}`);
+      return res.json() as Promise<{
+        rows?: Array<{ dimensionValues?: { value: string }[]; metricValues?: { value: string }[] }>;
+        totals?: Array<{ metricValues?: { value: string }[] }>;
+      }>;
+    };
+
+    const dateRanges = [{ startDate, endDate: "today" }];
+
+    const [totals, byDay, topPages, topSources, byCountry] = await Promise.all([
+      runReport({
+        dateRanges,
+        metrics: [
+          { name: "activeUsers" },
+          { name: "newUsers" },
+          { name: "sessions" },
+          { name: "screenPageViews" },
+          { name: "averageSessionDuration" },
+          { name: "bounceRate" },
+        ],
+      }),
+      runReport({
+        dateRanges,
+        dimensions: [{ name: "date" }],
+        metrics: [{ name: "activeUsers" }, { name: "sessions" }],
+        orderBys: [{ dimension: { dimensionName: "date" } }],
+      }),
+      runReport({
+        dateRanges,
+        dimensions: [{ name: "pagePath" }],
+        metrics: [{ name: "screenPageViews" }],
+        orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
+        limit: 10,
+      }),
+      runReport({
+        dateRanges,
+        dimensions: [{ name: "sessionSource" }],
+        metrics: [{ name: "sessions" }],
+        orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+        limit: 10,
+      }),
+      runReport({
+        dateRanges,
+        dimensions: [{ name: "country" }],
+        metrics: [{ name: "activeUsers" }],
+        orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
+        limit: 10,
+      }),
+    ]);
+
+    const tv = totals.totals?.[0]?.metricValues ?? [];
+    return {
+      totals: {
+        activeUsers: Number(tv[0]?.value ?? 0),
+        newUsers: Number(tv[1]?.value ?? 0),
+        sessions: Number(tv[2]?.value ?? 0),
+        pageViews: Number(tv[3]?.value ?? 0),
+        avgSessionDuration: Number(tv[4]?.value ?? 0),
+        bounceRate: Number(tv[5]?.value ?? 0),
+      },
+      byDay: (byDay.rows ?? []).map((r) => ({
+        date: r.dimensionValues?.[0]?.value ?? "",
+        users: Number(r.metricValues?.[0]?.value ?? 0),
+        sessions: Number(r.metricValues?.[1]?.value ?? 0),
+      })),
+      topPages: (topPages.rows ?? []).map((r) => ({
+        path: r.dimensionValues?.[0]?.value ?? "",
+        views: Number(r.metricValues?.[0]?.value ?? 0),
+      })),
+      topSources: (topSources.rows ?? []).map((r) => ({
+        source: r.dimensionValues?.[0]?.value ?? "",
+        sessions: Number(r.metricValues?.[0]?.value ?? 0),
+      })),
+      byCountry: (byCountry.rows ?? []).map((r) => ({
+        country: r.dimensionValues?.[0]?.value ?? "",
+        users: Number(r.metricValues?.[0]?.value ?? 0),
+      })),
+    };
+  });
