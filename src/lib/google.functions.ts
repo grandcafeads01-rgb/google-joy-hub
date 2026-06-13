@@ -968,7 +968,10 @@ export const getAnalyticsOverview = createServerFn({ method: "POST" })
       }),
     ]);
 
-    const tv = totals.totals?.[0]?.metricValues ?? [];
+    const tv =
+      totals.totals?.[0]?.metricValues ??
+      totals.rows?.[0]?.metricValues ??
+      [];
     return {
       totals: {
         activeUsers: Number(tv[0]?.value ?? 0),
