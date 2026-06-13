@@ -12,6 +12,7 @@ export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/content",
   "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/analytics.readonly",
 ].join(" ");
 
 function getClientCreds() {
