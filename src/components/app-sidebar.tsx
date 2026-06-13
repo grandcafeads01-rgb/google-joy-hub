@@ -198,6 +198,18 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
+                  isActive={currentPath.startsWith("/dashboard/analytics")}
+                  tooltip="Analytics"
+                >
+                  <Link to="/dashboard/analytics" className="flex items-center gap-2">
+                    <BarChart3 className="size-4" />
+                    {!collapsed && <span>Analytics</span>}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
                   isActive={currentPath.startsWith("/dashboard/settings")}
                   tooltip="Settings"
                 >
